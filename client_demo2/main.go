@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/pion/webrtc/v3"
 )
@@ -22,6 +23,7 @@ type Context struct {
 
 var context Context
 var nextProxy string
+var bytesReceived int64
 
 func connect(newAddr string) {
 	config := webrtc.Configuration{
@@ -65,13 +67,13 @@ func connect(newAddr string) {
 	})
 
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
 		m := Message{}
 		err := json.Unmarshal(msg.Data, &m)
 		if err != nil {
 			panic(err)
 		}
 		if m.Type == "switchProxy" {
+			fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
 			if m.Payload != "switch" {
 				nextProxy = m.Payload
 				reply := Message{"switchProxy", "switch"}
@@ -86,6 +88,8 @@ func connect(newAddr string) {
 				context.oldConnection = nil
 				context.oldConnection = context.newConnection
 			}
+		} else {
+			bytesReceived += int64(len(msg.Data))
 		}
 	})
 
@@ -132,7 +136,7 @@ func connect(newAddr string) {
 }
 
 func main() {
-	brokerAddr := flag.String("broker", "localhost:8888", "Address of the broker")
+	brokerAddr := flag.String("broker", ":8888", "Address of the broker")
 	flag.Parse()
 
 	config := webrtc.Configuration{
@@ -175,13 +179,13 @@ func main() {
 	})
 
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
 		m := Message{}
 		err := json.Unmarshal(msg.Data, &m)
 		if err != nil {
 			panic(err)
 		}
 		if m.Type == "switchProxy" {
+			fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
 			if m.Payload != "switch" {
 				nextProxy = m.Payload
 				reply := Message{"switchProxy", "switch"}
@@ -196,6 +200,8 @@ func main() {
 				context.oldConnection = nil
 				context.oldConnection = context.newConnection
 			}
+		} else {
+			bytesReceived += int64(len(msg.Data))
 		}
 	})
 
@@ -236,6 +242,14 @@ func main() {
 	//fmt.Println(answer)
 
 	peerConnection.SetRemoteDescription(answer)
+
+	tiker := time.NewTicker(1 * time.Second)
+	go func() {
+		for range tiker.C {
+			fmt.Printf("Bytes received: %d\n", bytesReceived)
+			bytesReceived = 0
+		}
+	}()
 	select {}
 
 }

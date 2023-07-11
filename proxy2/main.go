@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/pion/webrtc/v3"
@@ -21,6 +22,10 @@ type Message struct {
 	Type    string `json:"type"`
 	Payload string `json:"payload"`
 }
+
+const (
+	serverAddr = "localhost:8080"
+)
 
 var clients = make([]Client, 0)
 
@@ -44,6 +49,30 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 		client := Client{dc: d}
 		clients = append(clients, client)
 
+		fmt.Print("Proxy2: Connecting to server...")
+		conn, err := net.Dial("tcp", serverAddr)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Proxy2: Connected!")
+
+		go func() {
+			for {
+				buf := make([]byte, 1024)
+				n, err := conn.Read(buf)
+				if err != nil {
+					fmt.Println(err)
+					break
+				}
+				message := Message{"regular", string(buf[:n])}
+				messageJson, err := json.Marshal(message)
+				if err != nil {
+					panic(err)
+				}
+				d.Send(messageJson)
+			}
+		}()
+
 		d.OnMessage(func(msg webrtc.DataChannelMessage) {
 			m := Message{}
 			if err := json.Unmarshal(msg.Data, &m); err != nil {
@@ -60,6 +89,7 @@ func addHandler(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					panic(err)
 				}
+				conn.Close()
 				fmt.Println(resp)
 				respMsg := Message{"switchProxy", "switch"}
 				respPayload, err := json.Marshal(respMsg)
@@ -150,6 +180,30 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		client := Client{dc: d}
 		clients = append(clients, client)
 
+		fmt.Print("Proxy2: Connecting to server...")
+		conn, err := net.Dial("tcp", serverAddr)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Proxy2: Connected!")
+
+		go func() {
+			for {
+				buf := make([]byte, 1024)
+				n, err := conn.Read(buf)
+				if err != nil {
+					fmt.Println(err)
+					break
+				}
+				message := Message{"regular", string(buf[:n])}
+				messageJson, err := json.Marshal(message)
+				if err != nil {
+					panic(err)
+				}
+				d.Send(messageJson)
+			}
+		}()
+
 		d.OnMessage(func(msg webrtc.DataChannelMessage) {
 			m := Message{}
 			if err := json.Unmarshal(msg.Data, &m); err != nil {
@@ -166,6 +220,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					panic(err)
 				}
+				conn.Close()
 				fmt.Println(resp)
 				respMsg := Message{"switchProxy", "switch"}
 				respPayload, err := json.Marshal(respMsg)
